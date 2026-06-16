@@ -356,24 +356,24 @@ function difficultyScale() {
 function spawnEnemy() {
   const mission = missions[state.level - 1];
   const difficulty = difficultyScale();
-  const typeRoll = Math.random();
-  let type = "capsule";
-  if (state.level >= 2 && typeRoll > 0.76) type = "gunner";
-  if (state.level >= 2 && typeRoll > 0.88) type = "brute";
-  if (state.level === 3 && typeRoll < 0.2) type = "speeder";
-  const baseHp = { capsule: 2, gunner: 3, speeder: 1, brute: 6 }[type];
-  const speedMod = { capsule: 1, gunner: 0.86, speeder: 1.48, brute: 0.62 }[type];
-  const radius = { capsule: 28, gunner: 28, speeder: 20, brute: 38 }[type];
+  const pool = state.level === 1
+    ? ["pepe", "cat", "duck", "mouse"]
+    : state.level === 2
+      ? ["pepe", "cat", "penguin", "duck", "mouse", "musk"]
+      : ["pepe", "cat", "penguin", "duck", "mouse", "musk", "musk"];
+  const type = pool[Math.floor(Math.random() * pool.length)];
+  const stats = minionStats[type];
   const enemy = {
     type,
+    role: stats.role,
     x: W + 72,
     y: rand(74, H - 74),
-    r: radius,
-    hp: baseHp + (type === "speeder" ? 0 : difficulty.hpBonus),
-    speed: mission.speed * speedMod * difficulty.speed,
+    r: stats.radius,
+    hp: stats.hp + (stats.role === "speeder" ? 0 : difficulty.hpBonus),
+    speed: mission.speed * stats.speed * difficulty.speed,
     wobble: rand(0, Math.PI * 2),
     fire: rand(0.92, 2.05) * difficulty.fire,
-    scoreValue: { capsule: 130, gunner: 210, speeder: 160, brute: 360 }[type],
+    scoreValue: stats.score,
   };
   state.enemies.push(enemy);
   state.spawned += 1;
@@ -434,15 +434,15 @@ function shootPlayer() {
 function shootEnemy(e) {
   const angle = Math.atan2(state.player.y - e.y, state.player.x - e.x);
   const difficulty = difficultyScale();
-  const spread = e.type === "boss" ? [-0.34, -0.12, 0.12, 0.34] : e.type === "brute" ? [-0.16, 0.16] : [0];
+  const spread = e.type === "boss" ? [-0.34, -0.12, 0.12, 0.34] : e.role === "brute" ? [-0.16, 0.16] : [0];
   spread.forEach((offset) => {
     state.enemyBullets.push({
       x: e.x - e.r,
       y: e.y,
       vx: Math.cos(angle + offset) * (225 + state.level * 24 + difficulty.speed * 18),
       vy: Math.sin(angle + offset) * (225 + state.level * 24 + difficulty.speed * 18),
-      r: e.type === "brute" ? 7 : 6,
-      damage: e.type === "boss" ? 15 : e.type === "brute" ? 16 : 12,
+      r: e.role === "brute" ? 7 : 6,
+      damage: e.type === "boss" ? 15 : e.role === "brute" ? 16 : 12,
       life: 4,
     });
   });
@@ -482,10 +482,12 @@ function spawnPickup(enemy) {
   const p = state.player;
   if (enemy.type !== "boss" && (state.dropCooldown > 0 || p.power >= p.maxPower)) return;
   const dropChance = {
-    capsule: 0.07,
-    gunner: 0.16,
-    speeder: 0.1,
-    brute: 0.34,
+    pepe: 0.16,
+    cat: 0.14,
+    penguin: 0.12,
+    duck: 0.08,
+    mouse: 0.08,
+    musk: 0.34,
     boss: 1,
   }[enemy.type] || 0.18;
   if (Math.random() > dropChance) return;
@@ -549,7 +551,7 @@ function updatePickups(dt) {
 function completeEnemy(e) {
   state.score += e.scoreValue || (e.type === "boss" ? 2200 : 130);
   state.defeated += e.type === "boss" ? 4 : 1;
-  playKillSound(e.type);
+  playKillSound(e.role || e.type);
   addParticles(e.x, e.y, e.type === "boss" ? "#ffbb4d" : "#52ff9c", e.type === "boss" ? 80 : 24, 260);
   shake = e.type === "boss" ? 22 : 8;
   maybeDropUpgrade(e);
@@ -629,10 +631,10 @@ function update(dt) {
       e.y = H / 2 + Math.sin(e.wobble) * 124;
     } else {
       e.x -= e.speed * dt;
-      e.y += Math.sin(e.wobble) * (e.type === "speeder" ? 90 : 46) * dt;
+      e.y += Math.sin(e.wobble) * (e.role === "speeder" ? 90 : 46) * dt;
     }
     e.fire -= dt;
-    const canFire = e.type === "boss" || e.type === "gunner" || e.type === "brute" || (state.level >= 2 && e.type === "capsule");
+    const canFire = e.type === "boss" || e.role === "gunner" || e.role === "brute" || (state.level >= 2 && e.type === "penguin");
     if (canFire && e.fire <= 0) {
       shootEnemy(e);
       e.fire = (e.type === "boss" ? rand(0.36, 0.7) : rand(1.0, 2.0)) * difficultyScale().fire;
@@ -880,19 +882,167 @@ function drawPlayer(p) {
   ctx.restore();
 }
 
+function drawMinion(e) {
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.rotate(Math.sin(e.wobble) * 0.08);
+  const scale = e.role === "brute" ? 1.18 : e.role === "speeder" ? 0.82 : 1;
+  ctx.scale(scale, scale);
+
+  ctx.strokeStyle = "#081018";
+  ctx.lineWidth = 4;
+
+  if (e.type === "pepe") {
+    ctx.fillStyle = "#63c96b";
+    ctx.beginPath();
+    ctx.ellipse(-4, 2, 32, 24, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#f4f5e8";
+    [-16, 10].forEach((x) => {
+      ctx.beginPath();
+      ctx.arc(x, -11, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#101218";
+      ctx.beginPath();
+      ctx.arc(x + 1, -9, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#f4f5e8";
+    });
+    ctx.strokeStyle = "#a53446";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(-20, 12);
+    ctx.quadraticCurveTo(-2, 23, 20, 10);
+    ctx.stroke();
+  } else if (e.type === "cat") {
+    ctx.fillStyle = "#f2a24a";
+    ctx.beginPath();
+    ctx.moveTo(-26, -7);
+    ctx.lineTo(-18, -32);
+    ctx.lineTo(-4, -12);
+    ctx.moveTo(8, -12);
+    ctx.lineTo(24, -32);
+    ctx.lineTo(24, -5);
+    ctx.ellipse(0, 4, 29, 25, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#101218";
+    [-10, 12].forEach((x) => {
+      ctx.beginPath();
+      ctx.arc(x, -2, 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.strokeStyle = "#101218";
+    ctx.lineWidth = 2;
+    [-1, 1].forEach((side) => {
+      ctx.beginPath();
+      ctx.moveTo(side * 3, 9);
+      ctx.lineTo(side * 26, 4);
+      ctx.moveTo(side * 3, 13);
+      ctx.lineTo(side * 26, 16);
+      ctx.stroke();
+    });
+  } else if (e.type === "penguin") {
+    ctx.fillStyle = "#111820";
+    ctx.beginPath();
+    ctx.ellipse(0, 2, 27, 32, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#f6f2e0";
+    ctx.beginPath();
+    ctx.ellipse(0, 9, 17, 22, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ffb347";
+    ctx.beginPath();
+    ctx.moveTo(-2, -5);
+    ctx.lineTo(-20, 2);
+    ctx.lineTo(-2, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#101218";
+    [-8, 8].forEach((x) => {
+      ctx.beginPath();
+      ctx.arc(x, -11, 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  } else if (e.type === "duck") {
+    ctx.fillStyle = "#ffd85c";
+    ctx.beginPath();
+    ctx.ellipse(0, 7, 30, 20, 0, 0, Math.PI * 2);
+    ctx.ellipse(-15, -10, 18, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#f07b2f";
+    ctx.beginPath();
+    ctx.moveTo(-32, -10);
+    ctx.lineTo(-52, -4);
+    ctx.lineTo(-31, 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#101218";
+    ctx.beginPath();
+    ctx.arc(-18, -14, 3, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (e.type === "musk") {
+    ctx.fillStyle = "#25324f";
+    roundCapsule(-25, 2, 50, 34, 13);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#f1c9a6";
+    ctx.beginPath();
+    ctx.ellipse(0, -14, 23, 25, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#1a1518";
+    ctx.beginPath();
+    ctx.moveTo(-22, -21);
+    ctx.quadraticCurveTo(-4, -42, 23, -20);
+    ctx.lineTo(18, -33);
+    ctx.quadraticCurveTo(-2, -28, -22, -21);
+    ctx.fill();
+    ctx.fillStyle = "#101218";
+    [-7, 8].forEach((x) => {
+      ctx.beginPath();
+      ctx.arc(x, -14, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.fillStyle = "#52ff9c";
+    ctx.fillRect(-6, 12, 12, 12);
+  } else {
+    ctx.fillStyle = "#aeb6bd";
+    ctx.beginPath();
+    ctx.ellipse(0, 4, 24, 19, 0, 0, Math.PI * 2);
+    ctx.arc(-18, -12, 10, 0, Math.PI * 2);
+    ctx.arc(14, -13, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#101218";
+    [-8, 10].forEach((x) => {
+      ctx.beginPath();
+      ctx.arc(x, 1, 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.fillStyle = "#f0a0a8";
+    ctx.beginPath();
+    ctx.arc(-22, 7, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawEnemy(e) {
+  if (e.type !== "boss") {
+    drawMinion(e);
+    return;
+  }
+
   ctx.save();
   ctx.translate(e.x, e.y);
   ctx.rotate(Math.sin(e.wobble) * 0.04);
-  const scale = e.type === "boss" ? 1.55 : e.type === "brute" ? 1.22 : e.type === "speeder" ? 0.82 : 1;
-  ctx.scale(scale, scale);
-
-  ctx.fillStyle = "rgba(82,255,156,.46)";
-  ctx.beginPath();
-  ctx.moveTo(46, 0);
-  ctx.quadraticCurveTo(82, -14, 108, -5);
-  ctx.quadraticCurveTo(78, 12, 46, 0);
-  ctx.fill();
+  ctx.scale(1.55, 1.55);
 
   ctx.fillStyle = "#eef3ee";
   ctx.strokeStyle = "#081018";
@@ -901,7 +1051,7 @@ function drawEnemy(e) {
   ctx.fill();
   ctx.stroke();
 
-  ctx.fillStyle = e.type === "brute" ? "#d94852" : e.type === "gunner" ? "#ffbb4d" : "#10b872";
+  ctx.fillStyle = "#10b872";
   roundCapsule(0, -24, 58, 48, 20);
   ctx.fill();
   ctx.stroke();
@@ -927,11 +1077,18 @@ function drawEnemy(e) {
     ctx.fill();
   });
 
-  if (e.type === "boss") {
-    ctx.fillStyle = "#101720";
-    ctx.font = "700 15px Trebuchet MS";
-    ctx.fillText("PUMP-01", -26, 5);
-  }
+  ctx.fillStyle = "#101720";
+  ctx.font = "700 15px Trebuchet MS";
+  ctx.fillText("PUMP-01", -26, 5);
+
+  const bossPct = clamp(e.hp / e.maxHp, 0, 1);
+  ctx.fillStyle = "rgba(7,12,28,.82)";
+  ctx.fillRect(-52, -42, 104, 8);
+  ctx.fillStyle = "#ff5d62";
+  ctx.fillRect(-52, -42, 104 * bossPct, 8);
+  ctx.strokeStyle = "rgba(255,255,255,.34)";
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(-52, -42, 104, 8);
   ctx.restore();
 }
 
@@ -1030,12 +1187,16 @@ function drawBossBar() {
   if (!state.boss) return;
   const pct = clamp(state.boss.hp / state.boss.maxHp, 0, 1);
   ctx.save();
+  ctx.fillStyle = "#f8f4df";
+  ctx.font = "800 12px Trebuchet MS, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("PUMP-01 BOSS", W / 2, H - 42);
   ctx.fillStyle = "rgba(7,12,28,.72)";
-  ctx.fillRect(W / 2 - 140, H - 34, 280, 12);
+  ctx.fillRect(W / 2 - 170, H - 34, 340, 14);
   ctx.fillStyle = "#ff5d62";
-  ctx.fillRect(W / 2 - 140, H - 34, 280 * pct, 12);
+  ctx.fillRect(W / 2 - 170, H - 34, 340 * pct, 14);
   ctx.strokeStyle = "rgba(255,255,255,.26)";
-  ctx.strokeRect(W / 2 - 140, H - 34, 280, 12);
+  ctx.strokeRect(W / 2 - 170, H - 34, 340, 14);
   ctx.restore();
 }
 
