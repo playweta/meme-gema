@@ -1,0 +1,24 @@
+- main [ref=e2]:
+  - region "Mame Inu Last Shiba game" [ref=e3]:
+    - generic "Ship life":
+      - generic: "100"
+    - generic:
+      - generic:
+        - generic: LEVEL
+        - strong: "1"
+      - generic:
+        - generic: SCORE
+        - strong: "0"
+      - generic:
+        - generic: POWER
+        - strong: MK1
+    - button "Music on" [ref=e5] [cursor=pointer]: SND
+    - button "Pause game" [ref=e6] [cursor=pointer]: II
+    - generic [ref=e7]:
+      - heading "MAME INU" [level=1] [ref=e8]
+      - paragraph [ref=e9]: The last Shiba follows your mouse through a fake meme universe ruled by hype capsules.
+      - generic [ref=e10]:
+        - generic [ref=e11]: "Dog Planet carried the old meme culture: fun, loyalty, community."
+        - generic [ref=e12]: Pump Planet destroyed it. BabyDoge and FLOKI saved one survivor.
+        - generic [ref=e13]: Now Mame flies to bring the real meme culture back.
+      - button "Start Mission" [ref=e14] [cursor=pointer]

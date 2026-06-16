@@ -11,12 +11,35 @@ const ui = {
   pause: document.getElementById("pause"),
   sound: document.getElementById("sound"),
   story: document.querySelector(".story"),
+  lifeFill: document.getElementById("lifeFill"),
 };
+
+const sprites = {
+  playerShip: new Image(),
+  pepe: new Image(),
+  cat: new Image(),
+  penguin: new Image(),
+  duck: new Image(),
+  musk: new Image(),
+  mouse: new Image(),
+  troll: new Image(),
+  boss: new Image(),
+};
+sprites.playerShip.src = "assets/player-ship.png";
+sprites.pepe.src = "assets/pepe-cutout.png";
+sprites.cat.src = "assets/cat-cutout.png";
+sprites.penguin.src = "assets/penguin-cutout.png";
+sprites.duck.src = "assets/duck-cutout.png";
+sprites.musk.src = "assets/musk-rocket-cutout.png";
+sprites.mouse.src = "assets/mouse-cutout.png";
+sprites.troll.src = "assets/troll-cutout.png";
+sprites.boss.src = "assets/boss-pump01.png";
 
 const W = canvas.width;
 const H = canvas.height;
 const keys = new Set();
 const touch = { up: false, down: false, left: false, right: false, fire: false };
+const pointer = { active: false, x: 116, y: H / 2 };
 
 let state;
 let lastTime = 0;
@@ -39,12 +62,13 @@ const missions = [
 ];
 
 const minionStats = {
-  pepe: { role: "gunner", hp: 3, speed: 0.9, radius: 28, score: 210 },
-  cat: { role: "gunner", hp: 3, speed: 1.02, radius: 26, score: 190 },
-  penguin: { role: "basic", hp: 4, speed: 0.78, radius: 29, score: 180 },
-  duck: { role: "speeder", hp: 1, speed: 1.36, radius: 22, score: 150 },
-  musk: { role: "brute", hp: 7, speed: 0.62, radius: 38, score: 380 },
-  mouse: { role: "speeder", hp: 1, speed: 1.52, radius: 20, score: 160 },
+  pepe: { role: "gunner", hp: 9, speed: 0.9, radius: 28, score: 210 },
+  cat: { role: "gunner", hp: 9, speed: 1.02, radius: 26, score: 190 },
+  penguin: { role: "basic", hp: 12, speed: 0.78, radius: 29, score: 180 },
+  duck: { role: "speeder", hp: 3, speed: 1.36, radius: 22, score: 150 },
+  musk: { role: "brute", hp: 21, speed: 0.62, radius: 38, score: 380 },
+  mouse: { role: "speeder", hp: 3, speed: 1.52, radius: 20, score: 160 },
+  troll: { role: "gunner", hp: 12, speed: 0.96, radius: 28, score: 230 },
 };
 
 function resetGame() {
@@ -91,6 +115,9 @@ function makeStars() {
 
 function startGame() {
   resetGame();
+  pointer.active = false;
+  pointer.x = state.player.x;
+  pointer.y = state.player.y;
   ui.overlay.classList.add("hidden");
   updatePauseButton();
   startMusic();
@@ -326,6 +353,8 @@ function updateHud() {
   ui.score.textContent = String(state.score);
   ui.shield.textContent = String(Math.max(0, Math.ceil(state.player.shield)));
   ui.power.textContent = `MK${state.player.power}`;
+  const lifePct = clamp((state.player.shield / state.player.maxShield) * 100, 0, 100);
+  if (ui.lifeFill) ui.lifeFill.style.width = `${lifePct}%`;
 }
 
 function rand(min, max) {
@@ -334,6 +363,14 @@ function rand(min, max) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function bossRageHp(boss) {
+  return boss.rageHp || boss.maxHp / 2;
+}
+
+function bossPhaseOneHp(boss) {
+  return boss.phaseOneHp || boss.maxHp - bossRageHp(boss);
 }
 
 function collide(a, b) {
@@ -357,10 +394,10 @@ function spawnEnemy() {
   const mission = missions[state.level - 1];
   const difficulty = difficultyScale();
   const pool = state.level === 1
-    ? ["pepe", "cat", "duck", "mouse"]
+    ? ["pepe", "cat", "duck", "mouse", "troll"]
     : state.level === 2
-      ? ["pepe", "cat", "penguin", "duck", "mouse", "musk"]
-      : ["pepe", "cat", "penguin", "duck", "mouse", "musk", "musk"];
+      ? ["pepe", "cat", "penguin", "duck", "mouse", "musk", "troll"]
+      : ["pepe", "cat", "penguin", "duck", "mouse", "musk", "musk", "troll", "troll"];
   const type = pool[Math.floor(Math.random() * pool.length)];
   const stats = minionStats[type];
   const enemy = {
@@ -385,12 +422,14 @@ function spawnBoss() {
     x: W + 120,
     y: H / 2,
     r: 58,
-    hp: 54,
-    maxHp: 54,
+    hp: 550,
+    maxHp: 550,
+    phaseOneHp: 500,
+    rageHp: 50,
     speed: 66,
     wobble: 0,
     fire: 0.42,
-    phase: 0,
+    phase: 1,
     scoreValue: 2200,
   };
   state.enemies.push(state.boss);
@@ -434,15 +473,22 @@ function shootPlayer() {
 function shootEnemy(e) {
   const angle = Math.atan2(state.player.y - e.y, state.player.x - e.x);
   const difficulty = difficultyScale();
-  const spread = e.type === "boss" ? [-0.34, -0.12, 0.12, 0.34] : e.role === "brute" ? [-0.16, 0.16] : [0];
+  const spread = e.type === "boss"
+    ? e.phase === 2
+      ? [-0.52, -0.28, 0, 0.28, 0.52]
+      : [-0.34, -0.12, 0.12, 0.34]
+    : e.role === "brute"
+      ? [-0.16, 0.16]
+      : [0];
   spread.forEach((offset) => {
+    const rageSpeed = e.type === "boss" && e.phase === 2 ? 64 : 0;
     state.enemyBullets.push({
       x: e.x - e.r,
       y: e.y,
-      vx: Math.cos(angle + offset) * (225 + state.level * 24 + difficulty.speed * 18),
-      vy: Math.sin(angle + offset) * (225 + state.level * 24 + difficulty.speed * 18),
+      vx: Math.cos(angle + offset) * (225 + state.level * 24 + difficulty.speed * 18 + rageSpeed),
+      vy: Math.sin(angle + offset) * (225 + state.level * 24 + difficulty.speed * 18 + rageSpeed),
       r: e.role === "brute" ? 7 : 6,
-      damage: e.type === "boss" ? 15 : e.role === "brute" ? 16 : 12,
+      damage: e.type === "boss" ? (e.phase === 2 ? 18 : 15) : e.role === "brute" ? 16 : 12,
       life: 4,
     });
   });
@@ -488,6 +534,7 @@ function spawnPickup(enemy) {
     duck: 0.08,
     mouse: 0.08,
     musk: 0.34,
+    troll: 0.14,
     boss: 1,
   }[enemy.type] || 0.18;
   if (Math.random() > dropChance) return;
@@ -581,18 +628,31 @@ function update(dt) {
   const right = keys.has("arrowright") || keys.has("d") || touch.right;
   const up = keys.has("arrowup") || keys.has("w") || touch.up;
   const down = keys.has("arrowdown") || keys.has("s") || touch.down;
-  const fire = keys.has(" ") || keys.has("spacebar") || touch.fire;
 
   state.dropCooldown = Math.max(0, state.dropCooldown - dt);
 
   const dx = (right ? 1 : 0) - (left ? 1 : 0);
   const dy = (down ? 1 : 0) - (up ? 1 : 0);
-  const len = Math.hypot(dx, dy) || 1;
-  p.x = clamp(p.x + (dx / len) * 270 * dt, 42, W * 0.62);
-  p.y = clamp(p.y + (dy / len) * 270 * dt, 54, H - 46);
+  const hasManualMove = dx !== 0 || dy !== 0;
+  if (pointer.active && !hasManualMove) {
+    const targetX = clamp(pointer.x, 42, W * 0.62);
+    const targetY = clamp(pointer.y, 54, H - 46);
+    const moveX = targetX - p.x;
+    const moveY = targetY - p.y;
+    const dist = Math.hypot(moveX, moveY);
+    const step = Math.min(dist, 420 * dt);
+    if (dist > 0.5) {
+      p.x += (moveX / dist) * step;
+      p.y += (moveY / dist) * step;
+    }
+  } else {
+    const len = Math.hypot(dx, dy) || 1;
+    p.x = clamp(p.x + (dx / len) * 270 * dt, 42, W * 0.62);
+    p.y = clamp(p.y + (dy / len) * 270 * dt, 54, H - 46);
+  }
   p.cooldown = Math.max(0, p.cooldown - dt);
   p.invuln = Math.max(0, p.invuln - dt);
-  if (fire) shootPlayer();
+  shootPlayer();
 
   state.spawnTimer -= dt;
   if (state.spawned < mission.quota && state.spawnTimer <= 0) {
@@ -627,8 +687,16 @@ function update(dt) {
   state.enemies.forEach((e) => {
     e.wobble += dt * (e.type === "boss" ? 1.8 : 3.1);
     if (e.type === "boss") {
+      if (e.phase === 1 && e.hp <= bossRageHp(e)) {
+        e.phase = 2;
+        e.fire = 0.08;
+        state.message = "PUMP-01 RAGE MODE";
+        state.messageTimer = 2.2;
+        shake = 18;
+        addParticles(e.x, e.y, "#ff5d62", 48, 260);
+      }
       e.x = Math.max(W - 150, e.x - e.speed * dt);
-      e.y = H / 2 + Math.sin(e.wobble) * 124;
+      e.y = H / 2 + Math.sin(e.wobble * (e.phase === 2 ? 1.35 : 1)) * (e.phase === 2 ? 152 : 124);
     } else {
       e.x -= e.speed * dt;
       e.y += Math.sin(e.wobble) * (e.role === "speeder" ? 90 : 46) * dt;
@@ -637,7 +705,7 @@ function update(dt) {
     const canFire = e.type === "boss" || e.role === "gunner" || e.role === "brute" || (state.level >= 2 && e.type === "penguin");
     if (canFire && e.fire <= 0) {
       shootEnemy(e);
-      e.fire = (e.type === "boss" ? rand(0.36, 0.7) : rand(1.0, 2.0)) * difficultyScale().fire;
+      e.fire = (e.type === "boss" ? e.phase === 2 ? rand(0.2, 0.42) : rand(0.36, 0.7) : rand(1.0, 2.0)) * difficultyScale().fire;
     }
   });
 
@@ -762,6 +830,34 @@ function drawPlayer(p) {
   ctx.translate(p.x, p.y);
   const flash = p.invuln > 0 && Math.floor(p.invuln * 14) % 2 === 0;
   ctx.globalAlpha = flash ? 0.48 : 1;
+
+  if (sprites.playerShip.complete && sprites.playerShip.naturalWidth) {
+    const shipW = 82;
+    const shipH = 110;
+    ctx.shadowColor = p.power >= 4 ? "rgba(255,187,77,.58)" : "rgba(82,255,156,.42)";
+    ctx.shadowBlur = p.power >= 4 ? 22 : 16;
+    ctx.drawImage(sprites.playerShip, -shipW / 2, -shipH / 2, shipW, shipH);
+
+    ctx.globalAlpha = flash ? 0.38 : 0.72;
+    ctx.fillStyle = p.power >= 4 ? "rgba(255,187,77,.58)" : "rgba(82,255,156,.46)";
+    ctx.beginPath();
+    ctx.moveTo(-shipW / 2 + 3, -18);
+    ctx.quadraticCurveTo(-shipW / 2 - 22 - p.power * 3, 0, -shipW / 2 + 3, 18);
+    ctx.quadraticCurveTo(-shipW / 2 - 10, 0, -shipW / 2 + 3, -18);
+    ctx.fill();
+
+    if (p.power >= 3) {
+      ctx.fillStyle = p.power >= 4 ? "#ffbb4d" : "#52ff9c";
+      [-34, 34].forEach((y) => {
+        ctx.beginPath();
+        roundCapsule(14, y - 3, 24, 6, 3);
+        ctx.fill();
+      });
+    }
+
+    ctx.restore();
+    return;
+  }
 
   ctx.fillStyle = p.power >= 4 ? "rgba(255,187,77,.42)" : "rgba(82,255,156,.34)";
   ctx.beginPath();
@@ -893,124 +989,182 @@ function drawMinion(e) {
   ctx.lineWidth = 4;
 
   if (e.type === "pepe") {
-    ctx.fillStyle = "#63c96b";
-    ctx.beginPath();
-    ctx.ellipse(-4, 2, 32, 24, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#f4f5e8";
-    [-16, 10].forEach((x) => {
+    if (sprites.pepe.complete && sprites.pepe.naturalWidth) {
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(sprites.pepe, -36, -42, 72, 80);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#63c96b";
       ctx.beginPath();
-      ctx.arc(x, -11, 10, 0, Math.PI * 2);
+      ctx.ellipse(-4, 2, 32, 24, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#f4f5e8";
+      [-16, 10].forEach((x) => {
+        ctx.beginPath();
+        ctx.arc(x, -11, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#101218";
+        ctx.beginPath();
+        ctx.arc(x + 1, -9, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#f4f5e8";
+      });
+      ctx.strokeStyle = "#a53446";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(-20, 12);
+      ctx.quadraticCurveTo(-2, 23, 20, 10);
+      ctx.stroke();
+    }
+  } else if (e.type === "cat") {
+    if (sprites.cat.complete && sprites.cat.naturalWidth) {
+      ctx.drawImage(sprites.cat, -33, -39, 66, 72);
+    } else {
+      ctx.fillStyle = "#f2a24a";
+      ctx.beginPath();
+      ctx.moveTo(-26, -7);
+      ctx.lineTo(-18, -32);
+      ctx.lineTo(-4, -12);
+      ctx.moveTo(8, -12);
+      ctx.lineTo(24, -32);
+      ctx.lineTo(24, -5);
+      ctx.ellipse(0, 4, 29, 25, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#101218";
+      [-10, 12].forEach((x) => {
+        ctx.beginPath();
+        ctx.arc(x, -2, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.strokeStyle = "#101218";
+      ctx.lineWidth = 2;
+      [-1, 1].forEach((side) => {
+        ctx.beginPath();
+        ctx.moveTo(side * 3, 9);
+        ctx.lineTo(side * 26, 4);
+        ctx.moveTo(side * 3, 13);
+        ctx.lineTo(side * 26, 16);
+        ctx.stroke();
+      });
+    }
+  } else if (e.type === "penguin") {
+    if (sprites.penguin.complete && sprites.penguin.naturalWidth) {
+      ctx.drawImage(sprites.penguin, -34, -39, 68, 67);
+    } else {
+      ctx.fillStyle = "#111820";
+      ctx.beginPath();
+      ctx.ellipse(0, 2, 27, 32, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#f6f2e0";
+      ctx.beginPath();
+      ctx.ellipse(0, 9, 17, 22, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffb347";
+      ctx.beginPath();
+      ctx.moveTo(-2, -5);
+      ctx.lineTo(-20, 2);
+      ctx.lineTo(-2, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#101218";
+      [-8, 8].forEach((x) => {
+        ctx.beginPath();
+        ctx.arc(x, -11, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+  } else if (e.type === "duck") {
+    if (sprites.duck.complete && sprites.duck.naturalWidth) {
+      ctx.drawImage(sprites.duck, -42, -29, 84, 48);
+    } else {
+      ctx.fillStyle = "#ffd85c";
+      ctx.beginPath();
+      ctx.ellipse(0, 7, 30, 20, 0, 0, Math.PI * 2);
+      ctx.ellipse(-15, -10, 18, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#f07b2f";
+      ctx.beginPath();
+      ctx.moveTo(-32, -10);
+      ctx.lineTo(-52, -4);
+      ctx.lineTo(-31, 2);
+      ctx.closePath();
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = "#101218";
       ctx.beginPath();
-      ctx.arc(x + 1, -9, 3, 0, Math.PI * 2);
+      ctx.arc(-18, -14, 3, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#f4f5e8";
-    });
-    ctx.strokeStyle = "#a53446";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(-20, 12);
-    ctx.quadraticCurveTo(-2, 23, 20, 10);
-    ctx.stroke();
-  } else if (e.type === "cat") {
-    ctx.fillStyle = "#f2a24a";
-    ctx.beginPath();
-    ctx.moveTo(-26, -7);
-    ctx.lineTo(-18, -32);
-    ctx.lineTo(-4, -12);
-    ctx.moveTo(8, -12);
-    ctx.lineTo(24, -32);
-    ctx.lineTo(24, -5);
-    ctx.ellipse(0, 4, 29, 25, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#101218";
-    [-10, 12].forEach((x) => {
-      ctx.beginPath();
-      ctx.arc(x, -2, 3, 0, Math.PI * 2);
-      ctx.fill();
-    });
-    ctx.strokeStyle = "#101218";
-    ctx.lineWidth = 2;
-    [-1, 1].forEach((side) => {
-      ctx.beginPath();
-      ctx.moveTo(side * 3, 9);
-      ctx.lineTo(side * 26, 4);
-      ctx.moveTo(side * 3, 13);
-      ctx.lineTo(side * 26, 16);
-      ctx.stroke();
-    });
-  } else if (e.type === "penguin") {
-    ctx.fillStyle = "#111820";
-    ctx.beginPath();
-    ctx.ellipse(0, 2, 27, 32, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#f6f2e0";
-    ctx.beginPath();
-    ctx.ellipse(0, 9, 17, 22, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#ffb347";
-    ctx.beginPath();
-    ctx.moveTo(-2, -5);
-    ctx.lineTo(-20, 2);
-    ctx.lineTo(-2, 8);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = "#101218";
-    [-8, 8].forEach((x) => {
-      ctx.beginPath();
-      ctx.arc(x, -11, 3, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  } else if (e.type === "duck") {
-    ctx.fillStyle = "#ffd85c";
-    ctx.beginPath();
-    ctx.ellipse(0, 7, 30, 20, 0, 0, Math.PI * 2);
-    ctx.ellipse(-15, -10, 18, 16, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#f07b2f";
-    ctx.beginPath();
-    ctx.moveTo(-32, -10);
-    ctx.lineTo(-52, -4);
-    ctx.lineTo(-31, 2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#101218";
-    ctx.beginPath();
-    ctx.arc(-18, -14, 3, 0, Math.PI * 2);
-    ctx.fill();
+    }
   } else if (e.type === "musk") {
-    ctx.fillStyle = "#25324f";
-    roundCapsule(-25, 2, 50, 34, 13);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#f1c9a6";
-    ctx.beginPath();
-    ctx.ellipse(0, -14, 23, 25, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#1a1518";
-    ctx.beginPath();
-    ctx.moveTo(-22, -21);
-    ctx.quadraticCurveTo(-4, -42, 23, -20);
-    ctx.lineTo(18, -33);
-    ctx.quadraticCurveTo(-2, -28, -22, -21);
-    ctx.fill();
-    ctx.fillStyle = "#101218";
-    [-7, 8].forEach((x) => {
-      ctx.beginPath();
-      ctx.arc(x, -14, 2.6, 0, Math.PI * 2);
+    if (sprites.musk.complete && sprites.musk.naturalWidth) {
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(sprites.musk, -54, -50, 108, 113);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#25324f";
+      roundCapsule(-25, 2, 50, 34, 13);
       ctx.fill();
-    });
-    ctx.fillStyle = "#52ff9c";
-    ctx.fillRect(-6, 12, 12, 12);
+      ctx.stroke();
+      ctx.fillStyle = "#f1c9a6";
+      ctx.beginPath();
+      ctx.ellipse(0, -14, 23, 25, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#1a1518";
+      ctx.beginPath();
+      ctx.moveTo(-22, -21);
+      ctx.quadraticCurveTo(-4, -42, 23, -20);
+      ctx.lineTo(18, -33);
+      ctx.quadraticCurveTo(-2, -28, -22, -21);
+      ctx.fill();
+    }
+  } else if (e.type === "mouse") {
+    if (sprites.mouse.complete && sprites.mouse.naturalWidth) {
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(sprites.mouse, -34, -45, 68, 80);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#aeb6bd";
+      ctx.beginPath();
+      ctx.ellipse(0, 4, 24, 19, 0, 0, Math.PI * 2);
+      ctx.arc(-18, -12, 10, 0, Math.PI * 2);
+      ctx.arc(14, -13, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#101218";
+      [-8, 10].forEach((x) => {
+        ctx.beginPath();
+        ctx.arc(x, 1, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+  } else if (e.type === "troll") {
+    if (sprites.troll.complete && sprites.troll.naturalWidth) {
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(sprites.troll, -34, -29, 68, 57);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#f6f2e0";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 30, 22, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#101218";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-19, 6);
+      ctx.quadraticCurveTo(0, 20, 22, 6);
+      ctx.stroke();
+    }
   } else {
     ctx.fillStyle = "#aeb6bd";
     ctx.beginPath();
@@ -1042,53 +1196,58 @@ function drawEnemy(e) {
   ctx.save();
   ctx.translate(e.x, e.y);
   ctx.rotate(Math.sin(e.wobble) * 0.04);
-  ctx.scale(1.55, 1.55);
 
-  ctx.fillStyle = "#eef3ee";
-  ctx.strokeStyle = "#081018";
-  ctx.lineWidth = 4;
-  roundCapsule(-48, -24, 96, 48, 24);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = "#10b872";
-  roundCapsule(0, -24, 58, 48, 20);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = "#202934";
-  roundCapsule(23, -19, 26, 20, 9);
-  ctx.fill();
-
-  ctx.strokeStyle = "rgba(6, 12, 18, .44)";
-  ctx.lineWidth = 2;
-  [-24, 4, 28].forEach((x) => {
-    ctx.beginPath();
-    ctx.moveTo(x, -22);
-    ctx.lineTo(x - 4, 22);
-    ctx.stroke();
-  });
-
-  ctx.fillStyle = "#ff5d62";
-  [-16, 18].forEach((x) => {
-    ctx.beginPath();
-    ctx.arc(x, -26, 3, 0, Math.PI * 2);
-    ctx.arc(x - 16, 26, 3, 0, Math.PI * 2);
+  const rageHp = bossRageHp(e);
+  const phaseOneHp = bossPhaseOneHp(e);
+  const phaseOnePct = clamp((e.hp - rageHp) / phaseOneHp, 0, 1);
+  const phaseTwoPct = clamp(Math.min(e.hp, rageHp) / rageHp, 0, 1);
+  if (sprites.boss.complete && sprites.boss.naturalWidth) {
+    const bossW = 260;
+    const bossH = 170;
+    ctx.shadowColor = e.phase === 2 ? "rgba(255,93,98,.72)" : "rgba(82,255,156,.45)";
+    ctx.shadowBlur = e.phase === 2 ? 28 : 18;
+    ctx.drawImage(sprites.boss, -bossW / 2, -bossH / 2, bossW, bossH);
+    if (e.phase === 2) {
+      ctx.globalCompositeOperation = "source-atop";
+      ctx.fillStyle = "rgba(255,57,72,.16)";
+      ctx.fillRect(-bossW / 2, -bossH / 2, bossW, bossH);
+      ctx.globalCompositeOperation = "source-over";
+    }
+  } else {
+    ctx.scale(1.55, 1.55);
+    ctx.fillStyle = "#eef3ee";
+    ctx.strokeStyle = "#081018";
+    ctx.lineWidth = 4;
+    roundCapsule(-48, -24, 96, 48, 24);
     ctx.fill();
-  });
+    ctx.stroke();
 
-  ctx.fillStyle = "#101720";
-  ctx.font = "700 15px Trebuchet MS";
-  ctx.fillText("PUMP-01", -26, 5);
+    ctx.fillStyle = "#10b872";
+    roundCapsule(0, -24, 58, 48, 20);
+    ctx.fill();
+    ctx.stroke();
 
-  const bossPct = clamp(e.hp / e.maxHp, 0, 1);
+    ctx.fillStyle = "#202934";
+    roundCapsule(23, -19, 26, 20, 9);
+    ctx.fill();
+
+    ctx.fillStyle = "#101720";
+    ctx.font = "700 15px Trebuchet MS";
+    ctx.fillText("PUMP-01", -26, 5);
+    ctx.scale(1 / 1.55, 1 / 1.55);
+  }
+
   ctx.fillStyle = "rgba(7,12,28,.82)";
-  ctx.fillRect(-52, -42, 104, 8);
+  ctx.fillRect(-70, -98, 140, 6);
+  ctx.fillRect(-70, -89, 140, 6);
   ctx.fillStyle = "#ff5d62";
-  ctx.fillRect(-52, -42, 104 * bossPct, 8);
+  ctx.fillRect(-70, -98, 140 * phaseOnePct, 6);
+  ctx.fillStyle = "#ff9a3d";
+  ctx.fillRect(-70, -89, 140 * phaseTwoPct, 6);
   ctx.strokeStyle = "rgba(255,255,255,.34)";
   ctx.lineWidth = 1.5;
-  ctx.strokeRect(-52, -42, 104, 8);
+  ctx.strokeRect(-70, -98, 140, 6);
+  ctx.strokeRect(-70, -89, 140, 6);
   ctx.restore();
 }
 
@@ -1185,18 +1344,39 @@ function drawMessage() {
 
 function drawBossBar() {
   if (!state.boss) return;
-  const pct = clamp(state.boss.hp / state.boss.maxHp, 0, 1);
+  const rageHp = bossRageHp(state.boss);
+  const phaseOneHp = bossPhaseOneHp(state.boss);
+  const totalPerRow = 50;
+  const phaseOneFilled = Math.ceil(clamp((state.boss.hp - rageHp) / phaseOneHp, 0, 1) * totalPerRow);
+  const phaseTwoFilled = Math.ceil(clamp(Math.min(state.boss.hp, rageHp) / rageHp, 0, 1) * totalPerRow);
+  const cellW = 9;
+  const cellH = 8;
+  const gap = 2;
+  const barW = totalPerRow * cellW + (totalPerRow - 1) * gap;
+  const x = W / 2 - barW / 2;
+  const y = 68;
   ctx.save();
   ctx.fillStyle = "#f8f4df";
   ctx.font = "800 12px Trebuchet MS, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("PUMP-01 BOSS", W / 2, H - 42);
-  ctx.fillStyle = "rgba(7,12,28,.72)";
-  ctx.fillRect(W / 2 - 170, H - 34, 340, 14);
-  ctx.fillStyle = "#ff5d62";
-  ctx.fillRect(W / 2 - 170, H - 34, 340 * pct, 14);
-  ctx.strokeStyle = "rgba(255,255,255,.26)";
-  ctx.strokeRect(W / 2 - 170, H - 34, 340, 14);
+  ctx.fillText(state.boss.phase === 2 ? "PUMP-01 BOSS / RAGE MODE / 50 HP" : "PUMP-01 BOSS / PHASE 1 / 550 HP", W / 2, y - 11);
+
+  const drawRow = (rowY, filled, color) => {
+    for (let i = 0; i < totalPerRow; i += 1) {
+      const cellX = x + i * (cellW + gap);
+      ctx.fillStyle = "rgba(7,12,28,.74)";
+      ctx.fillRect(cellX, rowY, cellW, cellH);
+      if (i < filled) {
+        ctx.fillStyle = color;
+        ctx.fillRect(cellX, rowY, cellW, cellH);
+      }
+      ctx.strokeStyle = "rgba(255,255,255,.22)";
+      ctx.strokeRect(cellX, rowY, cellW, cellH);
+    }
+  };
+
+  drawRow(y, phaseOneFilled, "#ff5d62");
+  drawRow(y + 13, phaseTwoFilled, state.boss.phase === 2 ? "#ffbb4d" : "#ff9a3d");
   ctx.restore();
 }
 
@@ -1245,6 +1425,20 @@ window.addEventListener("keydown", (event) => {
 window.addEventListener("keyup", (event) => {
   keys.delete(event.key.toLowerCase());
 });
+
+function updatePointerTarget(event) {
+  if (!state || state.mode !== "playing") return;
+  const rect = canvas.getBoundingClientRect();
+  pointer.active = true;
+  pointer.x = ((event.clientX - rect.left) / rect.width) * W;
+  pointer.y = ((event.clientY - rect.top) / rect.height) * H;
+}
+
+canvas.addEventListener("pointerdown", (event) => {
+  updatePointerTarget(event);
+  canvas.setPointerCapture?.(event.pointerId);
+});
+canvas.addEventListener("pointermove", updatePointerTarget);
 
 window.addEventListener("pointerdown", unlockAudio, { passive: true });
 window.addEventListener("keydown", unlockAudio);

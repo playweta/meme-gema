@@ -5,12 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mame Inu: Last Shiba</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260616-player-ship" />
   </head>
   <body>
     <main class="shell">
       <section class="game-wrap" aria-label="Mame Inu Last Shiba game">
         <canvas id="game" width="960" height="540"></canvas>
+
+        <div class="pilot-status" aria-label="Ship life">
+          <span id="shield" class="pilot-life-value">100</span>
+          <span class="pilot-life-meter"><span id="lifeFill"></span></span>
+        </div>
 
         <div class="hud" aria-live="polite">
           <div>
@@ -20,10 +25,6 @@
           <div>
             <span class="label">SCORE</span>
             <strong id="score">0</strong>
-          </div>
-          <div>
-            <span class="label">SHIELD</span>
-            <strong id="shield">100</strong>
           </div>
           <div>
             <span class="label">POWER</span>
@@ -44,7 +45,7 @@
 
         <div id="overlay" class="overlay">
           <h1>MAME INU</h1>
-          <p>The last Shiba awakens in a fake meme universe ruled by hype capsules.</p>
+          <p>The last Shiba follows your mouse through a fake meme universe ruled by hype capsules.</p>
           <div class="story">
             <span>Dog Planet carried the old meme culture: fun, loyalty, community.</span>
             <span>Pump Planet destroyed it. BabyDoge and FLOKI saved one survivor.</span>
@@ -54,6 +55,6 @@
         </div>
       </section>
     </main>
-    <script src="game.js"></script>
+    <script src="game.js?v=20260616-boss-rage-hp"></script>
   </body>
 </html>
