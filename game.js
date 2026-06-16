@@ -53,6 +53,8 @@ const music = {
   muted: false,
   starting: false,
   tempoMs: 106,
+  endTimer: null,
+  endType: null,
 };
 
 const missions = [
@@ -114,25 +116,30 @@ function makeStars() {
 }
 
 function startGame() {
+  stopEndMusic();
   resetGame();
   pointer.active = false;
   pointer.x = state.player.x;
   pointer.y = state.player.y;
+  ui.overlay.classList.remove("is-win", "is-loss");
   ui.overlay.classList.add("hidden");
   updatePauseButton();
   startMusic();
   lastTime = performance.now();
 }
 
-function endGame(title, text) {
-  state.mode = title === "Mission Clear" ? "won" : "lost";
+function endGame(result, title, text) {
+  state.mode = result;
   ui.overlay.querySelector("h1").textContent = title;
   ui.overlay.querySelector("p").textContent = text;
   ui.story.classList.add("hidden");
   ui.start.textContent = "Restart";
+  ui.overlay.classList.toggle("is-win", result === "won");
+  ui.overlay.classList.toggle("is-loss", result === "lost");
   ui.overlay.classList.remove("hidden");
   updatePauseButton();
   stopMusic();
+  playEndMusic(result);
 }
 
 function updatePauseButton() {
@@ -298,6 +305,59 @@ function tickMusic() {
   music.step = (music.step + 1) % 32;
 }
 
+function tickEndMusic(result) {
+  if (!music.ctx || music.muted || state?.mode !== result) return;
+  const now = music.ctx.currentTime + 0.02;
+
+  if (result === "won") {
+    const fanfare = [
+      [523.25, 0, 0.24],
+      [659.25, 0.16, 0.24],
+      [783.99, 0.32, 0.3],
+      [1046.5, 0.62, 0.52],
+      [783.99, 1.2, 0.26],
+      [987.77, 1.38, 0.28],
+      [1174.66, 1.62, 0.62],
+    ];
+    const chords = [
+      [130.81, 0, 1.35],
+      [164.81, 0.03, 1.05],
+      [196, 0.06, 1.05],
+      [174.61, 1.36, 1.4],
+      [220, 1.39, 1.08],
+      [261.63, 1.42, 1.08],
+    ];
+
+    playSfxTone(156, now, 0.12, "sine", 0.12, 72);
+    playSfxTone(156, now + 1.36, 0.1, "sine", 0.08, 82);
+    fanfare.forEach(([freq, offset, duration]) => playTone(freq, now + offset, duration, "triangle", 0.042, 4));
+    chords.forEach(([freq, offset, duration]) => playTone(freq, now + offset, duration, "sawtooth", 0.024, -8));
+    playHiHat(now + 0.48, 0.026);
+    playHiHat(now + 0.96, 0.022);
+    playHiHat(now + 1.82, 0.026);
+    return;
+  }
+
+  const descent = [
+    [196, 0, 0.58],
+    [174.61, 0.52, 0.58],
+    [146.83, 1.04, 0.68],
+    [123.47, 1.72, 0.95],
+  ];
+  const alarm = [
+    [392, 0.12, 0.28],
+    [349.23, 0.72, 0.28],
+    [311.13, 1.28, 0.32],
+    [261.63, 2.02, 0.5],
+  ];
+
+  playSfxTone(92, now, 1.2, "sawtooth", 0.11, 38);
+  playNoiseBurst(now + 0.02, 0.42, 0.075);
+  playNoiseBurst(now + 1.56, 0.52, 0.065);
+  descent.forEach(([freq, offset, duration]) => playTone(freq, now + offset, duration, "square", 0.052, -14));
+  alarm.forEach(([freq, offset, duration]) => playTone(freq, now + offset, duration, "triangle", 0.032, -20));
+}
+
 function startMusic() {
   if (music.muted || music.starting) return;
   ensureMusic();
@@ -326,6 +386,30 @@ function stopMusic() {
   }
 }
 
+function playEndMusic(result) {
+  if (music.muted) return;
+  ensureMusic();
+  if (!music.ctx) return;
+  music.endType = result;
+  music.ctx
+    .resume()
+    .then(() => {
+      if (music.muted || music.endType !== result || state?.mode !== result) return;
+      if (music.endTimer) window.clearInterval(music.endTimer);
+      tickEndMusic(result);
+      music.endTimer = window.setInterval(() => tickEndMusic(result), result === "won" ? 2800 : 3200);
+    })
+    .catch(() => {});
+}
+
+function stopEndMusic() {
+  music.endType = null;
+  if (music.endTimer) {
+    window.clearInterval(music.endTimer);
+    music.endTimer = null;
+  }
+}
+
 function unlockAudio() {
   if (music.muted) return;
   ensureMusic();
@@ -342,8 +426,11 @@ function toggleSound() {
   music.muted = !music.muted;
   if (music.muted) {
     stopMusic();
+    stopEndMusic();
   } else if (state?.mode === "playing") {
     startMusic();
+  } else if (state?.mode === "won" || state?.mode === "lost") {
+    playEndMusic(state.mode);
   }
   updateSoundButton();
 }
@@ -520,7 +607,7 @@ function damagePlayer(amount) {
   addParticles(p.x, p.y, "#ff5d62", 18, 220);
   updateHud();
   if (p.shield <= 0) {
-    endGame("Mame Fell", `Score ${state.score}. The fake hype capsules kept the meme universe asleep.`);
+    endGame("lost", "Mame Fell", `Score ${state.score}. The fake hype capsules kept the meme universe asleep.`);
   }
 }
 
@@ -607,7 +694,7 @@ function completeEnemy(e) {
 
 function advanceLevel() {
   if (state.level >= missions.length) {
-    endGame("Culture Restored", `Score ${state.score}. Mame remembered Dog Planet and brought real meme culture back.`);
+    endGame("won", "Culture Restored", `Score ${state.score}. Mame remembered Dog Planet and brought real meme culture back.`);
     return;
   }
   state.level += 1;
