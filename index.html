@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mame Inu: Last Shiba</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="game-wrap" aria-label="Mame Inu Last Shiba game">
+        <canvas id="game" width="960" height="540"></canvas>
+
+        <div class="hud" aria-live="polite">
+          <div>
+            <span class="label">LEVEL</span>
+            <strong id="level">1</strong>
+          </div>
+          <div>
+            <span class="label">SCORE</span>
+            <strong id="score">0</strong>
+          </div>
+          <div>
+            <span class="label">SHIELD</span>
+            <strong id="shield">100</strong>
+          </div>
+          <div>
+            <span class="label">POWER</span>
+            <strong id="power">MK1</strong>
+          </div>
+        </div>
+
+        <button id="sound" class="sound-button" aria-label="Toggle music" aria-pressed="false">SND</button>
+        <button id="pause" class="pause-button" aria-label="Pause game">II</button>
+
+        <div class="touch-controls" aria-label="touch controls">
+          <button class="pad" data-dir="up" aria-label="Move up">&uarr;</button>
+          <button class="pad" data-dir="left" aria-label="Move left">&larr;</button>
+          <button class="pad fire" data-fire aria-label="Fire">&bull;</button>
+          <button class="pad" data-dir="right" aria-label="Move right">&rarr;</button>
+          <button class="pad" data-dir="down" aria-label="Move down">&darr;</button>
+        </div>
+
+        <div id="overlay" class="overlay">
+          <h1>MAME INU</h1>
+          <p>The last Shiba awakens in a fake meme universe ruled by hype capsules.</p>
+          <div class="story">
+            <span>Dog Planet carried the old meme culture: fun, loyalty, community.</span>
+            <span>Pump Planet destroyed it. BabyDoge and FLOKI saved one survivor.</span>
+            <span>Now Mame flies to bring the real meme culture back.</span>
+          </div>
+          <button id="start">Start Mission</button>
+        </div>
+      </section>
+    </main>
+    <script src="game.js"></script>
+  </body>
+</html>
